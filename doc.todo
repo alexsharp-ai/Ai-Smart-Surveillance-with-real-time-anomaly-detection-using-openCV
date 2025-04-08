@@ -1,0 +1,11 @@
+Naccesary Libraires installing on Application
+--> pip install beepy DateTime SSIM-PIL scikit-image times opencv-python DateTime tkintertable tk tkfontchooser fonts pillow numpy
+--> pip install opencv-contrib-python
+
+
+Create A Conda Environment and cofigures to activate the Environment ( Anaconda Navigator)
+--> conda create -n yolo_env python=3.8
+--> conda activate yolo_env
+
+To run entire application by using command
+--> python main.py
