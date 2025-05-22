@@ -36,7 +36,7 @@ def find_motion():
 	motion_detected = False
 	is_start_done = False
 
-	cap = cv2.VideoCapture(0)
+	cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")
 
 	check = []
 	

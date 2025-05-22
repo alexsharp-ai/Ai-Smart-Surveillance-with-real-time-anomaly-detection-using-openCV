@@ -39,7 +39,7 @@ def collect_data():
     ids = input("Enter ID: ")
     count = 1
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")
     filename = "haarcascade_frontalface_default.xml"
 
     if not os.path.exists("persons"):
@@ -97,7 +97,7 @@ def train():
 
 def identify():
     """Identifies faces using the trained model."""
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")
     filename = "haarcascade_frontalface_default.xml"
 
     if not os.path.exists("model.yml"):
