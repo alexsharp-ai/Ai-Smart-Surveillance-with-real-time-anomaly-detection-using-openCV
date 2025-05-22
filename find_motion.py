@@ -36,12 +36,12 @@ def find_motion():
 	motion_detected = False
 	is_start_done = False
 
-	# Use local webcam instead of RTSP stream for testing
-	cap = cv2.VideoCapture(0)  # 0 is typically the default webcam
+	# Use RTSP stream
+	cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")
 	
 	# Check if camera opened successfully
 	if not cap.isOpened():
-	    print("Error: Could not open camera.")
+	    print("Error: Could not open RTSP stream.")
 	    return
 
 	check = []
