@@ -9,10 +9,10 @@ def in_out():
     if not os.path.exists('entries'):
         os.makedirs('entries')
     
-    cap = cv2.VideoCapture(0)  # Use default webcam
+    cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")  # Use RTSP stream
     
     if not cap.isOpened():
-        print("Error: Could not open camera.")
+        print("Error: Could not open RTSP stream.")
         return
     
     # Load face detection classifier
