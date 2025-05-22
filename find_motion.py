@@ -36,7 +36,13 @@ def find_motion():
 	motion_detected = False
 	is_start_done = False
 
-	cap = cv2.VideoCapture("rtsp://B48mfZuY:1ilmri3ObV99IADP@192.168.2.12:554/live/ch0")
+	# Use local webcam instead of RTSP stream for testing
+	cap = cv2.VideoCapture(0)  # 0 is typically the default webcam
+	
+	# Check if camera opened successfully
+	if not cap.isOpened():
+	    print("Error: Could not open camera.")
+	    return
 
 	check = []
 	
@@ -94,13 +100,14 @@ def find_motion():
 		# else:
 		# 	cv2.putText(frm2, "no motion detected", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
-		cv2.imshow("winname", frm2)
+		cv2.imshow("Motion Detection", frm2)
 		
 
 		_, frm1 = cap.read()
 		frm1 = cv2.cvtColor(frm1, cv2.COLOR_BGR2GRAY)
 
-		if cv2.waitKey(1) == 27:
+		if cv2.waitKey(1) == 27:  # ESC key to exit
+			cap.release()
 			cv2.destroyAllWindows()
 			break
 
