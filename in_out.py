@@ -1,145 +1,134 @@
 import cv2
 import numpy as np
-from collections import OrderedDict
+import time
 from datetime import datetime
+import os
 
-class CentroidTracker:
-    def __init__(self, max_disappeared=50):
-        self.next_object_id = 0
-        self.objects = OrderedDict()
-        self.disappeared = OrderedDict()
-        self.max_disappeared = max_disappeared
-
-    def register(self, centroid):
-        self.objects[self.next_object_id] = centroid
-        self.disappeared[self.next_object_id] = 0
-        self.next_object_id += 1
-
-    def deregister(self, object_id):
-        del self.objects[object_id]
-        del self.disappeared[object_id]
-
-    def update(self, input_centroids):
-        if len(input_centroids) == 0:
-            for object_id in list(self.disappeared.keys()):
-                self.disappeared[object_id] += 1
-                if self.disappeared[object_id] > self.max_disappeared:
-                    self.deregister(object_id)
-            return self.objects
-
-        if len(self.objects) == 0:
-            for centroid in input_centroids:
-                self.register(centroid)
-        else:
-            object_ids = list(self.objects.keys())
-            object_centroids = list(self.objects.values())
-
-            D = np.linalg.norm(np.array(object_centroids)[:, np.newaxis] - input_centroids, axis=2)
-            rows = D.min(axis=1).argsort()
-            cols = D.argmin(axis=1)[rows]
-
-            used_rows = set()
-            used_cols = set()
-
-            for (row, col) in zip(rows, cols):
-                if row in used_rows or col in used_cols:
-                    continue
-
-                object_id = object_ids[row]
-                self.objects[object_id] = input_centroids[col]
-                self.disappeared[object_id] = 0
-
-                used_rows.add(row)
-                used_cols.add(col)
-
-            unused_rows = set(range(D.shape[0])) - used_rows
-            unused_cols = set(range(D.shape[1])) - used_cols
-
-            for row in unused_rows:
-                object_id = object_ids[row]
-                self.disappeared[object_id] += 1
-                if self.disappeared[object_id] > self.max_disappeared:
-                    self.deregister(object_id)
-
-            for col in unused_cols:
-                self.register(input_centroids[col])
-
-        return self.objects
 def in_out():
-    net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'mobilenet_iter_73000.caffemodel')
-
-    CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
-
-    cap = cv2.VideoCapture(0)
-
-    enter_count = 0
-    exit_count = 0
-
-    ct = CentroidTracker()
-
-    previous_x = {}
-
-    line_position = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) // 2)
-
-    while cap.isOpened():
+    # Create directory for storing entry/exit images if it doesn't exist
+    if not os.path.exists('entries'):
+        os.makedirs('entries')
+    
+    cap = cv2.VideoCapture(0)  # Use default webcam
+    
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        return
+    
+    # Load face detection classifier
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+    
+    if face_cascade.empty():
+        print("Error: Couldn't load face cascade classifier.")
+        return
+    
+    # Initialize background subtractor
+    backSub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=16, detectShadows=True)
+    
+    # Parameters
+    entry_direction = "right"  # People enter from right side of frame
+    min_contour_area = 5000   # Minimum contour area to be considered a person
+    
+    # Variables to track people
+    people_entered = 0
+    people_exited = 0
+    active_tracks = []
+    
+    print("Monitoring for entries and exits...")
+    
+    # Wait for camera to initialize
+    time.sleep(2)
+    
+    while True:
         ret, frame = cap.read()
         if not ret:
             break
-
-        (h, w) = frame.shape[:2]
-
-        blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5)
-        net.setInput(blob)
-        detections = net.forward()
-
-        centroids = []
-
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            if confidence > 0.5:
-                idx = int(detections[0, 0, i, 1])
-                if CLASSES[idx] != "person":
-                    continue
-
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                (x1, y1, x2, y2) = box.astype("int")
-                centroid = (int((x1 + x2) / 2), int((y1 + y2) / 2))
-                centroids.append(centroid)
-
-                label = f"Person {confidence:.2f}"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        objects = ct.update(centroids)
-
-        for (object_id, centroid) in objects.items():
-            current_x = centroid[0]
-
-            if object_id in previous_x:
-                prev_x = previous_x[object_id]
-
-                if prev_x < line_position and current_x > line_position:
-                    enter_count += 1
-                    print(f"Person {object_id} entered.")
-                    cv2.imwrite(f"visitors/in/Person{object_id}.jpg", frame)
-
-                elif prev_x > line_position and current_x < line_position:
-                    exit_count += 1
-                    print(f"Person {object_id} exited.")
-                    cv2.imwrite(f"visitors/out/Person{object_id}.jpg", frame)
-
-            previous_x[object_id] = current_x
-
-        cv2.line(frame, (line_position, 0), (line_position, h), (0, 0, 255), 1)
-
-        cv2.putText(frame, f"Enter: {enter_count}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        cv2.putText(frame, f"Exit: {exit_count}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        cv2.putText(frame, f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", (1, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 1)
-
-        cv2.imshow("People Entry/Exit", frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            
+        # Apply background subtraction
+        fg_mask = backSub.apply(frame)
+        
+        # Apply some morphology operations to remove noise
+        kernel = np.ones((5,5), np.uint8)
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
+        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
+        
+        # Find contours
+        contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Process each contour
+        for contour in contours:
+            if cv2.contourArea(contour) < min_contour_area:
+                continue
+                
+            # Get bounding box
+            x, y, w, h = cv2.boundingRect(contour)
+            
+            # Calculate center of the contour
+            center_x = x + w // 2
+            
+            # Draw rectangle around the contour
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            # Check for faces in this region to confirm it's a person
+            roi_gray = cv2.cvtColor(frame[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(roi_gray, 1.1, 5)
+            
+            if len(faces) > 0:
+                # Person detected
+                person_id = f"{datetime.now().timestamp()}"
+                
+                # Determine if entering or exiting based on position
+                if entry_direction == "right":
+                    # If moving from right to left (x decreasing)
+                    if center_x < frame.shape[1] // 2:
+                        if person_id not in active_tracks:
+                            people_entered += 1
+                            active_tracks.append(person_id)
+                            
+                            # Save image of the person entering
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"entries/entry_{timestamp}.jpg"
+                            cv2.imwrite(filename, frame)
+                            print(f"Person entered. Image saved to {filename}")
+                    else:
+                        if person_id not in active_tracks:
+                            people_exited += 1
+                            active_tracks.append(person_id)
+                            
+                            # Save image of the person exiting
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"entries/exit_{timestamp}.jpg"
+                            cv2.imwrite(filename, frame)
+                            print(f"Person exited. Image saved to {filename}")
+                
+                # Draw face rectangle
+                for (fx, fy, fw, fh) in faces:
+                    cv2.rectangle(frame[y:y+h, x:x+w], (fx, fy), (fx + fw, fy + fh), (255, 0, 0), 2)
+        
+        # Clean up old tracks
+        if len(active_tracks) > 10:
+            active_tracks = active_tracks[-10:]
+            
+        # Add counters to the frame
+        cv2.putText(frame, f"Entered: {people_entered}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, f"Exited: {people_exited}", (10, 60), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        # Draw dividing line
+        cv2.line(frame, (frame.shape[1] // 2, 0), (frame.shape[1] // 2, frame.shape[0]), (0, 255, 255), 2)
+        
+        # Display the frame
+        cv2.imshow("Entry/Exit Detection", frame)
+        
+        # If 'ESC' is pressed, break from the loop
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:  # ESC key
             break
-
+    
+    # Release everything when done
     cap.release()
     cv2.destroyAllWindows()
+    
+    print(f"Final count - Entered: {people_entered}, Exited: {people_exited}")
+    return
